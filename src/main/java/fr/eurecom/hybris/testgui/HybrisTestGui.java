@@ -27,16 +27,24 @@ import javax.swing.UIManager;
 
 import org.jclouds.ContextBuilder;
 import org.jclouds.blobstore.BlobStore;
+import org.jclouds.blobstore.BlobStores;
+import org.jclouds.blobstore.domain.StorageMetadata;
+import org.jclouds.blobstore.options.ListContainerOptions;
 import org.jclouds.openstack.swift.v1.blobstore.RegionScopedBlobStoreContext;
 import org.jets3t.service.impl.rest.httpclient.GoogleStorageService;
+import org.jets3t.service.model.GSObject;
 import org.jets3t.service.security.GSCredentials;
 
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.Region;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.microsoft.windowsazure.services.blob.client.CloudBlob;
 import com.microsoft.windowsazure.services.blob.client.CloudBlobClient;
 import com.microsoft.windowsazure.services.blob.client.CloudBlobContainer;
+import com.microsoft.windowsazure.services.blob.client.ListBlobItem;
 import com.microsoft.windowsazure.services.core.storage.CloudStorageAccount;
 
 import fr.eurecom.hybris.Hybris;
@@ -52,9 +60,14 @@ public class HybrisTestGui implements KeyListener {
     private CloudBlobClient azureClient;
     private BlobStore rackspaceBlobStore;
     
+    private JList<String> lstRackspace, lstAmazon, lstGoogle, lstAzure, lstHybris;
+    DefaultListModel<String> lmRackspace, lmAmazon, lmGoogle, lmAzure, lmHybris;
+    
     private final String hybrisPropertiesFile = "hybris.properties";
     private final String hybrisAccountsPropertiesFile = "accounts.properties";
     private final String container = "hybris-guitest";
+    
+    private CloudBlobContainer containerRef;
     
     public class CustomOutputStream extends OutputStream {
         private JTextArea textArea;
@@ -71,17 +84,13 @@ public class HybrisTestGui implements KeyListener {
         }
     }
 
-    /**
-     * Launch the application.
-     */
     public static void main(String[] args) {
         EventQueue.invokeLater(new Runnable() {
             public void run() {
                 try {
                     UIManager.setLookAndFeel(UIManager
                             .getSystemLookAndFeelClassName());
-                    HybrisTestGui window = new HybrisTestGui();
-                    window.frame.setVisible(true);
+                    new HybrisTestGui();
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -89,21 +98,69 @@ public class HybrisTestGui implements KeyListener {
         });
     }
 
-    /**
-     * Create the application.
-     */
     public HybrisTestGui() {
         
+        lmHybris = new DefaultListModel<String>();
+        lmAmazon = new DefaultListModel<String>();
+        lmAzure = new DefaultListModel<String>();
+        lmGoogle = new DefaultListModel<String>();
+        lmRackspace = new DefaultListModel<String>();
+        
+        initializeGUI();
+        frame.setVisible(true);
+        
         // initialize Hybris and single clouds
+        // TODO parallelize
         try {
+            System.out.println("Initializing Hybris...");
             hybris = new Hybris(hybrisPropertiesFile);
+            
+            System.out.println("Initializing single clouds...");
             initSingleCloudClients();
+            
+            System.out.println("Listing clouds...");
+            refreshLists();            
         } catch (Exception e) {
             e.printStackTrace();
         }
-        
-        initialize();
     }
+    
+   private void refreshLists() {
+       
+       try {
+           for (String str: hybris.list())
+               lmHybris.addElement(str);
+       
+           ObjectListing objectListing = s3Client.listObjects(this.container);
+           boolean loop = false;
+           do {
+               for (S3ObjectSummary objectSummary : objectListing.getObjectSummaries())
+                   lmAmazon.addElement(objectSummary.getKey());
+               if (objectListing.isTruncated()) {
+                   objectListing = s3Client.listNextBatchOfObjects(objectListing);
+                   loop = true;
+               } else loop = false;
+           } while (loop);
+           
+           for (ListBlobItem blobItem : containerRef.listBlobs()) {
+               CloudBlob blob = (CloudBlob) blobItem;
+               lmAzure.addElement(blob.getName());
+           }
+           
+           GSObject[] objs = this.gsService.listObjects(container);
+           for(GSObject obj: objs)
+               lmGoogle.addElement(obj.getName());
+           
+           for (StorageMetadata resourceMd :
+               BlobStores.listAll(rackspaceBlobStore,
+                       container, ListContainerOptions.NONE))
+               lmRackspace.addElement(resourceMd.getName());
+           
+       } catch (Exception e) {
+           e.printStackTrace();
+       }
+
+   }
     
     private void initSingleCloudClients() throws Exception {
 
@@ -134,7 +191,7 @@ public class HybrisTestGui implements KeyListener {
                 + "AccountKey=" + credential + ";";
         CloudStorageAccount account = CloudStorageAccount.parse(connectionString);
         this.azureClient = account.createCloudBlobClient();
-        CloudBlobContainer containerRef = this.azureClient.getContainerReference(this.container);
+        containerRef = this.azureClient.getContainerReference(this.container);
         containerRef.createIfNotExist();
 
 
@@ -149,10 +206,7 @@ public class HybrisTestGui implements KeyListener {
         this.rackspaceBlobStore.createContainerInLocation(null, this.container);
     }
     
-    /**
-     * Initialize the contents of the frame.
-     */
-    private void initialize() {
+    private void initializeGUI() {
         frame = new JFrame();
         frame.setBounds(100, 100, 650, 500);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -180,14 +234,10 @@ public class HybrisTestGui implements KeyListener {
         gbc.gridheight = 3;
         gbc.gridx = 0;
         gbc.gridy = 1;
-        DefaultListModel<String> dlmh = new DefaultListModel<String>();
-        dlmh.addElement("file1");
-        dlmh.addElement("file2");
-        dlmh.addElement("file3");
-        dlmh.addElement("file4");
-        JList<String> hybrisList = new JList<String>(dlmh);
-        hybrisList.setPreferredSize(new java.awt.Dimension(100, 500));
-        hybrisPanel.add(hybrisList, gbc);
+        
+        lstHybris = new JList<String>(lmHybris);
+        lstHybris.setPreferredSize(new java.awt.Dimension(100, 500));
+        hybrisPanel.add(lstHybris, gbc);
 
         gbc.anchor = GridBagConstraints.SOUTH;
         gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -210,52 +260,47 @@ public class HybrisTestGui implements KeyListener {
         gbc.gridy = 0;
         gbc.gridwidth = 1;
         gbc.gridheight = 1;
-        cloudsPanel.add(new JLabel("Cloud1"), gbc);
+        cloudsPanel.add(new JLabel("Amazon"), gbc);
 
         gbc.gridheight = 2;
         gbc.gridy = 1;
-        DefaultListModel<String> dlm = new DefaultListModel<String>();
-        dlm.addElement("file1_chunk1");
-        dlm.addElement("file2_chunk1");
-        dlm.addElement("file3_chunk1");
-        dlm.addElement("file4_chunk1");
-        JList<String> listC1 = new JList<String>(dlm);
-        listC1.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        listC1.setPreferredSize(new java.awt.Dimension(100, 100));
-        cloudsPanel.add(listC1, gbc);
+        lstAmazon = new JList<String>(lmAmazon);
+        lstAmazon.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        lstAmazon.setPreferredSize(new java.awt.Dimension(100, 100));
+        cloudsPanel.add(lstAmazon, gbc);
 
         gbc.gridy = 3;
         gbc.gridheight = 1;
-        cloudsPanel.add(new JLabel("Cloud2"), gbc);
+        cloudsPanel.add(new JLabel("Azure"), gbc);
 
         gbc.gridheight = 2;
         gbc.gridy = 4;
-        JList<String> listC2 = new JList<String>(dlm);
-        listC2.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        listC2.setPreferredSize(new java.awt.Dimension(100, 100));
-        cloudsPanel.add(listC2, gbc);
+        lstAzure = new JList<String>(lmAzure);
+        lstAzure.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        lstAzure.setPreferredSize(new java.awt.Dimension(100, 100));
+        cloudsPanel.add(lstAzure, gbc);
 
         gbc.gridy = 6;
         gbc.gridheight = 1;
-        cloudsPanel.add(new JLabel("Cloud3"), gbc);
+        cloudsPanel.add(new JLabel("Rackspace"), gbc);
 
         gbc.gridheight = 2;
         gbc.gridy = 7;
-        JList<String> listC3 = new JList<String>(dlm);
-        listC3.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        listC3.setPreferredSize(new java.awt.Dimension(100, 100));
-        cloudsPanel.add(listC3, gbc);
+        lstGoogle = new JList<String>(lmGoogle);
+        lstGoogle.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        lstGoogle.setPreferredSize(new java.awt.Dimension(100, 100));
+        cloudsPanel.add(lstGoogle, gbc);
 
         gbc.gridy = 9;
         gbc.gridheight = 1;
-        cloudsPanel.add(new JLabel("Cloud4"), gbc);
+        cloudsPanel.add(new JLabel("Google"), gbc);
 
         gbc.gridheight = 2;
         gbc.gridy = 10;
-        JList<String> listC4 = new JList<String>(dlm);
-        listC4.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        listC4.setPreferredSize(new java.awt.Dimension(100, 100));
-        cloudsPanel.add(listC4, gbc);
+        lstRackspace = new JList<String>(lmRackspace);
+        lstRackspace.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        lstRackspace.setPreferredSize(new java.awt.Dimension(100, 100));
+        cloudsPanel.add(lstRackspace, gbc);
         
         cloudParentPanel.add(hybrisPanel);
         cloudParentPanel.add(cloudsPanel);
@@ -270,7 +315,7 @@ public class HybrisTestGui implements KeyListener {
         gbc.gridy = 1;
         JTextArea jt = new JTextArea(5, 30);      
         JScrollPane scrollPane = new JScrollPane(jt);
-        jt.setText("> cmd output...");
+        jt.setText("");
         frame.add(scrollPane, gbc);
         
         PrintStream printStream = new PrintStream(new CustomOutputStream(jt));
@@ -281,11 +326,11 @@ public class HybrisTestGui implements KeyListener {
         frame.setSize(550, 700);
         frame.setResizable(false);
         
-        listC1.addKeyListener(this);
-        listC2.addKeyListener(this);
-        listC3.addKeyListener(this);
-        listC4.addKeyListener(this);
-        hybrisList.addKeyListener(this);
+        lstAmazon.addKeyListener(this);
+        lstAzure.addKeyListener(this);
+        lstGoogle.addKeyListener(this);
+        lstRackspace.addKeyListener(this);
+        lstHybris.addKeyListener(this);
     }
 
 
@@ -297,7 +342,6 @@ public class HybrisTestGui implements KeyListener {
                 ((DefaultListModel<String>) jlist.getModel()).remove(jlist.getSelectedIndex());
             }
         }
-        
     }
 
     public void keyTyped(KeyEvent e) { }
