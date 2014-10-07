@@ -7,8 +7,12 @@ import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
+import java.util.Properties;
 
-import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JFrame;
@@ -18,13 +22,54 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
-import javax.swing.ListModel;
 import javax.swing.ListSelectionModel;
 import javax.swing.UIManager;
+
+import org.jclouds.ContextBuilder;
+import org.jclouds.blobstore.BlobStore;
+import org.jclouds.openstack.swift.v1.blobstore.RegionScopedBlobStoreContext;
+import org.jets3t.service.impl.rest.httpclient.GoogleStorageService;
+import org.jets3t.service.security.GSCredentials;
+
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.Region;
+import com.microsoft.windowsazure.services.blob.client.CloudBlobClient;
+import com.microsoft.windowsazure.services.blob.client.CloudBlobContainer;
+import com.microsoft.windowsazure.services.core.storage.CloudStorageAccount;
+
+import fr.eurecom.hybris.Hybris;
 
 public class HybrisTestGui implements KeyListener {
 
     private JFrame frame;
+    
+    private Hybris hybris;
+
+    private AmazonS3 s3Client;
+    private GoogleStorageService gsService;
+    private CloudBlobClient azureClient;
+    private BlobStore rackspaceBlobStore;
+    
+    private final String hybrisPropertiesFile = "hybris.properties";
+    private final String hybrisAccountsPropertiesFile = "accounts.properties";
+    private final String container = "hybris-guitest";
+    
+    public class CustomOutputStream extends OutputStream {
+        private JTextArea textArea;
+         
+        public CustomOutputStream(JTextArea textArea) {
+            this.textArea = textArea;
+        }
+         
+        @Override
+        public void write(int b) throws IOException {
+            textArea.append(String.valueOf((char)b));
+            // scrolls the text area to the end of data
+            textArea.setCaretPosition(textArea.getDocument().getLength());
+        }
+    }
 
     /**
      * Launch the application.
@@ -48,122 +93,66 @@ public class HybrisTestGui implements KeyListener {
      * Create the application.
      */
     public HybrisTestGui() {
-        initialize1();
+        
+        // initialize Hybris and single clouds
+        try {
+            hybris = new Hybris(hybrisPropertiesFile);
+            initSingleCloudClients();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        
+        initialize();
     }
-
     
-    private void initialize() {
-        frame = new JFrame();
-        frame.setBounds(100, 100, 650, 500);
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.getContentPane().setLayout(new GridBagLayout());
+    private void initSingleCloudClients() throws Exception {
 
-        GridBagConstraints gbc = new GridBagConstraints();
+        String provider = null, identity = null, credential = null;
+        Properties accountsProperties = new Properties();
+        accountsProperties.load(new FileInputStream(this.hybrisAccountsPropertiesFile));
 
-        gbc.anchor = GridBagConstraints.CENTER;
-        gbc.fill = GridBagConstraints.BOTH;
-        gbc.weightx = 1.0;
-        gbc.weighty = 1.0;
-        gbc.insets = new Insets(5, 5, 5, 5);
+        // Amazon S3
+        identity = accountsProperties.getProperty("hybris.kvs.drivers.amazon.akey");
+        credential = accountsProperties.getProperty("hybris.kvs.drivers.amazon.skey");
+        BasicAWSCredentials credentials = new BasicAWSCredentials(identity, credential);
+        this.s3Client = new AmazonS3Client(credentials);
+        if (!this.s3Client.doesBucketExist(this.container))
+            this.s3Client.createBucket(this.container, Region.EU_Ireland);
 
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.gridwidth = 3;
-        gbc.gridheight = 1;
-        frame.add(new JLabel("Hybris"), gbc);
+        // Google cloud storage
+        identity = accountsProperties.getProperty("hybris.kvs.drivers.google.akey");
+        credential = accountsProperties.getProperty("hybris.kvs.drivers.google.skey");
+        GSCredentials gsCredentials = new GSCredentials(identity, credential);
+        this.gsService = new GoogleStorageService(gsCredentials);
+        this.gsService.getOrCreateBucket(this.container);
 
-        gbc.gridheight = 10;
-        gbc.gridx = 0;
-        gbc.gridy = 1;
-        String[] data = { "file1", "file2", "file3", "file4" };
-        JList<String> myList = new JList<String>(data);
-        // myList.setPreferredSize(new Dimension(30, 120));
-        frame.add(myList, gbc);
+        // Azure (SDK)
+        identity = accountsProperties.getProperty("hybris.kvs.drivers.azure.akey");
+        credential = accountsProperties.getProperty("hybris.kvs.drivers.azure.skey");
+        String connectionString = "DefaultEndpointsProtocol=http;"
+                + "AccountName=" + identity + ";"
+                + "AccountKey=" + credential + ";";
+        CloudStorageAccount account = CloudStorageAccount.parse(connectionString);
+        this.azureClient = account.createCloudBlobClient();
+        CloudBlobContainer containerRef = this.azureClient.getContainerReference(this.container);
+        containerRef.createIfNotExist();
 
-        JPanel jp = new JPanel();
-        jp.setLayout(new BoxLayout(jp, BoxLayout.X_AXIS));
-        
-/*        gbc.fill = GridBagConstraints.NONE;
-        gbc.gridx = 0;
-        gbc.gridy = 11;
-        gbc.gridwidth = 1;
-        gbc.gridheight = 1;*/
-        JButton b1 = new JButton("Put");
-//        frame.add(b2, gbc);
 
-//        gbc.gridx = 1;
-        JButton b2 = new JButton("Get");
-//        frame.add(b3, gbc);
-
-//        gbc.gridx = 2;
-        JButton b3 = new JButton("Delete");
-        jp.add(b1);
-        jp.add(b2);
-        jp.add(b3);
-        
-        gbc.gridx = 0;
-        gbc.gridy = 11;
-        gbc.gridwidth = 1;
-        gbc.gridheight = 1;
-        frame.add(jp, gbc);
-
-        gbc.fill = GridBagConstraints.BOTH;
-        gbc.gridx = 4;
-        gbc.gridy = 0;
-        gbc.gridwidth = 3;
-        gbc.gridheight = 1;
-        frame.add(new JLabel("Cloud1"), gbc);
-
-        gbc.gridheight = 2;
-        gbc.gridy = 1;
-        String[] data1 = { "file2_chunk1", "file2_chunk1", "file3_chunk1",
-                "file4_chunk1" };
-        JList<String> listC1 = new JList<String>(data1);
-        frame.add(listC1, gbc);
-
-        gbc.gridy = 3;
-        gbc.gridheight = 1;
-        frame.add(new JLabel("Cloud2"), gbc);
-
-        gbc.gridheight = 2;
-        gbc.gridy = 4;
-        JList<String> listC2 = new JList<String>(data1);
-        frame.add(listC2, gbc);
-
-        gbc.gridy = 6;
-        gbc.gridheight = 1;
-        frame.add(new JLabel("Cloud3"), gbc);
-
-        gbc.gridheight = 2;
-        gbc.gridy = 7;
-        JList<String> listC3 = new JList<String>(data1);
-        frame.add(listC3, gbc);
-
-        gbc.gridy = 9;
-        gbc.gridheight = 1;
-        frame.add(new JLabel("Cloud4"), gbc);
-
-        gbc.gridheight = 2;
-        gbc.gridy = 10;
-        JList<String> listC4 = new JList<String>(data1);
-        frame.add(listC4, gbc);
-
-        gbc.gridx = 0;
-        gbc.gridy = 13;
-        gbc.gridwidth = 7;
-        gbc.gridheight = 5;
-        JTextArea jt = new JTextArea(5, 30);
-        JScrollPane scrollPane = new JScrollPane(jt);
-        jt.setText("> cmd output...");
-        frame.add(scrollPane, gbc);
-
-        frame.pack();
+        // Rackspace (jClouds)
+        provider = "rackspace-cloudfiles-us";
+        identity = accountsProperties.getProperty("hybris.kvs.drivers.rackspace.akey");
+        credential = accountsProperties.getProperty("hybris.kvs.drivers.rackspace.skey");
+        this.rackspaceBlobStore = ContextBuilder.newBuilder(provider)
+                .credentials(identity, credential)
+                .buildView(RegionScopedBlobStoreContext.class)
+                .blobStoreInRegion("IAD");
+        this.rackspaceBlobStore.createContainerInLocation(null, this.container);
     }
     
     /**
      * Initialize the contents of the frame.
      */
-    private void initialize1() {
+    private void initialize() {
         frame = new JFrame();
         frame.setBounds(100, 100, 650, 500);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -279,10 +268,14 @@ public class HybrisTestGui implements KeyListener {
         
         gbc.gridx = 0;
         gbc.gridy = 1;
-        JTextArea jt = new JTextArea(5, 30);
+        JTextArea jt = new JTextArea(5, 30);      
         JScrollPane scrollPane = new JScrollPane(jt);
         jt.setText("> cmd output...");
-        frame.add(scrollPane, gbc);        
+        frame.add(scrollPane, gbc);
+        
+        PrintStream printStream = new PrintStream(new CustomOutputStream(jt));
+        System.setOut(printStream);
+        System.setErr(printStream);
 
         frame.pack();
         frame.setSize(550, 700);
@@ -295,10 +288,6 @@ public class HybrisTestGui implements KeyListener {
         hybrisList.addKeyListener(this);
     }
 
-    public void keyPressed(KeyEvent e) {
-        
-        
-    }
 
     public void keyReleased(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_DELETE) {
@@ -311,8 +300,6 @@ public class HybrisTestGui implements KeyListener {
         
     }
 
-    public void keyTyped(KeyEvent e) {
-        
-        
-    }
+    public void keyTyped(KeyEvent e) { }
+    public void keyPressed(KeyEvent e) { }
 }
