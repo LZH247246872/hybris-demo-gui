@@ -69,6 +69,10 @@ public class HybrisTestGui implements KeyListener {
     
     private CloudBlobContainer containerRef;
     
+    enum OperationType {
+        INIT, REFRESH, INIT_REFRESH
+    };
+    
     public class CustomOutputStream extends OutputStream {
         private JTextArea textArea;
          
@@ -97,9 +101,78 @@ public class HybrisTestGui implements KeyListener {
             }
         });
     }
+    
+    public class BackgroundWorker implements Runnable {    
+        
+        private OperationType opType;
+        
+        public BackgroundWorker(OperationType o) { opType = o; }
+
+        public void run() {
+            switch(opType) {
+            case INIT:
+                initClouds();
+                break;
+            case REFRESH:
+                refreshLists();
+                break;
+            case INIT_REFRESH:
+                initClouds();
+                refreshLists();
+                System.out.println("Initialized.");
+                break;
+            }
+        }
+        
+        private void initClouds() {
+            try {
+                System.out.println("Initializing Hybris...");
+                hybris = new Hybris(hybrisPropertiesFile);
+                
+                System.out.println("Initializing single clouds...");
+                initSingleCloudClients();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        
+        private void refreshLists() {
+            try {
+                System.out.println("Listing clouds...");
+                for (String str: hybris.list())
+                    lmHybris.addElement(str);
+            
+                ObjectListing objectListing = s3Client.listObjects(container);
+                boolean loop = false;
+                do {
+                    for (S3ObjectSummary objectSummary : objectListing.getObjectSummaries())
+                        lmAmazon.addElement(objectSummary.getKey());
+                    if (objectListing.isTruncated()) {
+                        objectListing = s3Client.listNextBatchOfObjects(objectListing);
+                        loop = true;
+                    } else loop = false;
+                } while (loop);
+                
+                for (ListBlobItem blobItem : containerRef.listBlobs()) {
+                    CloudBlob blob = (CloudBlob) blobItem;
+                    lmAzure.addElement(blob.getName());
+                }
+                
+                GSObject[] objs = gsService.listObjects(container);
+                for(GSObject obj: objs)
+                    lmGoogle.addElement(obj.getName());
+                
+                for (StorageMetadata resourceMd :
+                    BlobStores.listAll(rackspaceBlobStore,
+                            container, ListContainerOptions.NONE))
+                    lmRackspace.addElement(resourceMd.getName());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
 
     public HybrisTestGui() {
-        
         lmHybris = new DefaultListModel<String>();
         lmAmazon = new DefaultListModel<String>();
         lmAzure = new DefaultListModel<String>();
@@ -109,58 +182,9 @@ public class HybrisTestGui implements KeyListener {
         initializeGUI();
         frame.setVisible(true);
         
-        // initialize Hybris and single clouds
-        // TODO parallelize
-        try {
-            System.out.println("Initializing Hybris...");
-            hybris = new Hybris(hybrisPropertiesFile);
-            
-            System.out.println("Initializing single clouds...");
-            initSingleCloudClients();
-            
-            System.out.println("Listing clouds...");
-            refreshLists();            
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        new Thread(new BackgroundWorker(OperationType.INIT_REFRESH)).start();
     }
     
-   private void refreshLists() {
-       
-       try {
-           for (String str: hybris.list())
-               lmHybris.addElement(str);
-       
-           ObjectListing objectListing = s3Client.listObjects(this.container);
-           boolean loop = false;
-           do {
-               for (S3ObjectSummary objectSummary : objectListing.getObjectSummaries())
-                   lmAmazon.addElement(objectSummary.getKey());
-               if (objectListing.isTruncated()) {
-                   objectListing = s3Client.listNextBatchOfObjects(objectListing);
-                   loop = true;
-               } else loop = false;
-           } while (loop);
-           
-           for (ListBlobItem blobItem : containerRef.listBlobs()) {
-               CloudBlob blob = (CloudBlob) blobItem;
-               lmAzure.addElement(blob.getName());
-           }
-           
-           GSObject[] objs = this.gsService.listObjects(container);
-           for(GSObject obj: objs)
-               lmGoogle.addElement(obj.getName());
-           
-           for (StorageMetadata resourceMd :
-               BlobStores.listAll(rackspaceBlobStore,
-                       container, ListContainerOptions.NONE))
-               lmRackspace.addElement(resourceMd.getName());
-           
-       } catch (Exception e) {
-           e.printStackTrace();
-       }
-
-   }
     
     private void initSingleCloudClients() throws Exception {
 
