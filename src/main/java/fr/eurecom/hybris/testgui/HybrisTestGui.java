@@ -5,8 +5,11 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -15,6 +18,7 @@ import java.util.Properties;
 
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -25,6 +29,7 @@ import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
 import javax.swing.UIManager;
 
+import org.apache.commons.io.FileUtils;
 import org.jclouds.ContextBuilder;
 import org.jclouds.blobstore.BlobStore;
 import org.jclouds.blobstore.BlobStores;
@@ -49,7 +54,11 @@ import com.microsoft.windowsazure.services.core.storage.CloudStorageAccount;
 
 import fr.eurecom.hybris.Hybris;
 
-public class HybrisTestGui implements KeyListener {
+/**
+ * GUI for showing benefits of using Hybris during demos. 
+ * @author P. Viotti
+ */
+public class HybrisTestGui implements KeyListener, ActionListener {
 
     private JFrame frame;
     
@@ -61,7 +70,9 @@ public class HybrisTestGui implements KeyListener {
     private BlobStore rackspaceBlobStore;
     
     private JList<String> lstRackspace, lstAmazon, lstGoogle, lstAzure, lstHybris;
-    DefaultListModel<String> lmRackspace, lmAmazon, lmGoogle, lmAzure, lmHybris;
+    private DefaultListModel<String> lmRackspace, lmAmazon, lmGoogle, lmAzure, lmHybris;
+    
+    private JButton btnGet, btnPut, btnDelete;
     
     private final String hybrisPropertiesFile = "hybris.properties";
     private final String hybrisAccountsPropertiesFile = "accounts.properties";
@@ -70,7 +81,7 @@ public class HybrisTestGui implements KeyListener {
     private CloudBlobContainer containerRef;
     
     enum OperationType {
-        INIT, REFRESH, INIT_REFRESH
+        INIT_REFRESH, REFRESH 
     };
     
     public class CustomOutputStream extends OutputStream {
@@ -110,10 +121,8 @@ public class HybrisTestGui implements KeyListener {
 
         public void run() {
             switch(opType) {
-            case INIT:
-                initClouds();
-                break;
             case REFRESH:
+                System.out.println("Refreshing lists...");
                 refreshLists();
                 break;
             case INIT_REFRESH:
@@ -268,16 +277,16 @@ public class HybrisTestGui implements KeyListener {
         gbc.gridwidth = 1;
         gbc.gridx = 0;
         gbc.gridy = 4;
-        JButton b1 = new JButton("Put");
-        hybrisPanel.add(b1, gbc);
+        btnPut = new JButton("Put");
+        hybrisPanel.add(btnPut, gbc);
         gbc.gridx = 1;
         gbc.gridy = 4;
-        JButton b2 = new JButton("Get");
-        hybrisPanel.add(b2, gbc);
+        btnGet = new JButton("Get");
+        hybrisPanel.add(btnGet, gbc);
         gbc.gridx = 2;
         gbc.gridy = 4;
-        JButton b3 = new JButton("Delete");
-        hybrisPanel.add(b3, gbc);
+        btnDelete = new JButton("Delete");
+        hybrisPanel.add(btnDelete, gbc);
         
         gbc.fill = GridBagConstraints.BOTH;
         gbc.gridx = 0;
@@ -355,6 +364,10 @@ public class HybrisTestGui implements KeyListener {
         lstGoogle.addKeyListener(this);
         lstRackspace.addKeyListener(this);
         lstHybris.addKeyListener(this);
+        
+        btnGet.addActionListener(this);
+        btnPut.addActionListener(this);
+        btnDelete.addActionListener(this);
     }
 
 
@@ -370,4 +383,32 @@ public class HybrisTestGui implements KeyListener {
 
     public void keyTyped(KeyEvent e) { }
     public void keyPressed(KeyEvent e) { }
+
+
+    public void actionPerformed(ActionEvent e) {
+        
+        String cmd = e.getActionCommand();
+        if (cmd.equals("Get")) {
+           System.out.println("Get..");
+        }
+        if (cmd.equals("Put")) {
+            final JFileChooser fc = new JFileChooser();
+            int returnVal = fc.showOpenDialog(frame);
+            if (returnVal == JFileChooser.APPROVE_OPTION) {
+                File file = fc.getSelectedFile();
+                System.out.println("Opening: " + file.getName() + ".");
+                byte[] array;
+                try {
+                    array = FileUtils.readFileToByteArray(file);
+                    hybris.put(file.getName(), array);
+                    new Thread(new BackgroundWorker(OperationType.REFRESH)).start();
+                } catch (Exception e1) {
+                    e1.printStackTrace();
+                }
+                
+            }
+        } if (cmd.equals("Delete")) {
+            System.out.println("Delete..");
+        }
+    }
 }
