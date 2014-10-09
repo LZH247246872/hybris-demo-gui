@@ -1,3 +1,18 @@
+/**
+ * Copyright (C) 2014 EURECOM (www.eurecom.fr)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *         http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package fr.eurecom.hybris.testgui;
 
 import java.awt.EventQueue;
@@ -35,8 +50,13 @@ import fr.eurecom.hybris.testgui.CloudManager.OperationType;
 /**
  * GUI for showing some benefits of using Hybris during demos. 
  * @author P. Viotti
+ * 
+ * TODO:
+ * - embedded Zk server (?)
+ * - GET function
+ * - tooltip with size (?)
  */
-public class HybrisTestGui implements KeyListener, ActionListener {
+public class HybrisDemoGui implements KeyListener, ActionListener {
 
     private CloudManager cm;
     
@@ -67,7 +87,7 @@ public class HybrisTestGui implements KeyListener, ActionListener {
                 try {
                     UIManager.setLookAndFeel(UIManager
                             .getSystemLookAndFeelClassName());
-                    new HybrisTestGui();
+                    new HybrisDemoGui();
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -76,7 +96,7 @@ public class HybrisTestGui implements KeyListener, ActionListener {
     }
     
 
-    public HybrisTestGui() {
+    public HybrisDemoGui() {
         lmHybris = new DefaultListModel<String>();
         lmAmazon = new DefaultListModel<String>();
         lmAzure = new DefaultListModel<String>();
