@@ -6,7 +6,8 @@ using [Hybris](http://github.com/pviotti/hybris) as storage library.
 Hybris Demo GUI allows you to:
 
  - add files to Hybris (and it shows to which clouds are uploaded)
- - remove files from Hybris and from single clouds
+ - remove files from Hybris 
+ - remove files from single clouds to simulate faults
  - list Hybris and clouds containers
  - retrieve files from Hybris
  
@@ -16,5 +17,5 @@ Hybris Demo GUI allows you to:
 
 ### Authors and license
 
-Hybris Demo GUI has been developed at [EURECOM](http://www.eurecom.fr) as part of the [CloudSpaces](http://cloudspaces.eu/) European research project.  
+Hybris Demo GUI has been developed at [EURECOM](http://www.eurecom.fr) as part of the [CloudSpaces](http://cloudspaces.eu/) European research project.
 Its code is released under the terms of Apache 2.0 license.  
