@@ -52,8 +52,8 @@ import fr.eurecom.hybris.testgui.CloudManager.OperationType;
  * @author P. Viotti
  * 
  * TODO:
+ * - erasure coding
  * - embedded Zk server (?)
- * - GET function
  * - tooltip with size (?)
  */
 public class HybrisDemoGui implements KeyListener, ActionListener {
@@ -113,7 +113,7 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
     
     
     private void initializeGUI() {
-        frame = new JFrame("Hybris Test GUI");
+        frame = new JFrame("Hybris Demo GUI");
         frame.setIconImage(new ImageIcon(getClass().getResource("/clouds.png")).getImage());
         frame.setBounds(100, 100, 650, 500);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -279,9 +279,23 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
     public void actionPerformed(ActionEvent e) {
         
         String cmd = e.getActionCommand();
-        if (cmd.equals("Get")) {    // TODO
+        if (cmd.equals("Get")) {
             
-           System.out.println("Get..");
+            if (lstHybris.getSelectedIndex() >= 0) {
+                try {
+                   System.out.println("Retrieving " + lstHybris.getSelectedValue() + "...");
+                   byte[] retrieved = cm.hybris.get(lstHybris.getSelectedValue());
+                   JFileChooser fc = new JFileChooser();
+                   int returnVal = fc.showSaveDialog(frame);
+                   if (returnVal == JFileChooser.APPROVE_OPTION) {
+                       File file = fc.getSelectedFile();
+                       FileUtils.writeByteArrayToFile(file, retrieved);
+                       System.out.println("Saved: " + file.getName() + ".");
+                   }
+               } catch (Exception e1) {
+                   e1.printStackTrace();
+               }
+            }
            
         } if (cmd.equals("Put")) {
             
@@ -289,7 +303,7 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
             int returnVal = fc.showOpenDialog(frame);
             if (returnVal == JFileChooser.APPROVE_OPTION) {
                 File file = fc.getSelectedFile();
-                System.out.println("Opening: " + file.getName() + ".");
+                System.out.println("Putting: " + file.getName() + ".");
                 byte[] array;
                 try {
                     array = FileUtils.readFileToByteArray(file);

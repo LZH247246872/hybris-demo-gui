@@ -47,7 +47,7 @@ public class CloudManager {
     
     private HybrisDemoGui gui;
     
-    private Hybris hybris;
+    public Hybris hybris;
 
     private AmazonS3 s3Client;
     private GoogleStorageService gsService;
@@ -61,7 +61,7 @@ public class CloudManager {
     private final String container = "hybris-guitest";
     
     enum OperationType {
-        INIT_REFRESH, REFRESH, DELETE, GET, PUT 
+        INIT_REFRESH, REFRESH, DELETE, PUT 
     };
     
     enum ClientType {
@@ -104,9 +104,6 @@ public class CloudManager {
             case DELETE:
                 delete();
                 refreshLists();
-                break;
-            case GET:
-                get();
                 break;
             case PUT:
                 put();
@@ -224,32 +221,7 @@ public class CloudManager {
                 e.printStackTrace();
             }
         }
-        
-        private void get() { // TODO
-            try {
-                switch(cType) {
-                    case AWS:
-                        s3Client.deleteObject(container, key);
-                        break;
-                    case GOOGLE:
-                        gsService.deleteObject(container, key);
-                        break;
-                    case AZURE:
-                        CloudBlockBlob blob = containerRef.getBlockBlobReference(key);
-                        blob.delete();
-                        break;
-                    case HYBRIS:
-                        hybris.delete(key);
-                        break;
-                    case RACKSPACE:
-                        rackspaceBlobStore.removeBlob(container, key);
-                        break;
-                }
-            } catch(Exception e) {
-                e.printStackTrace();
-            }
-        }
-        
+
         private void delete() {
             try {
                 switch(cType) {
