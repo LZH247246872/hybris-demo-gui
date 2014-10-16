@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package fr.eurecom.hybris.testgui;
+package fr.eurecom.hybris.demogui;
 
 import java.awt.EventQueue;
 import java.awt.GridBagConstraints;
@@ -44,8 +44,8 @@ import javax.swing.UIManager;
 
 import org.apache.commons.io.FileUtils;
 
-import fr.eurecom.hybris.testgui.CloudManager.ClientType;
-import fr.eurecom.hybris.testgui.CloudManager.OperationType;
+import fr.eurecom.hybris.demogui.CloudManager.ClientType;
+import fr.eurecom.hybris.demogui.CloudManager.OperationType;
 
 /**
  * GUI for showing some benefits of using Hybris during demos. 
@@ -144,6 +144,7 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
         
         lstHybris = new JList<String>(lmHybris);
         lstHybris.setPreferredSize(new java.awt.Dimension(100, 500));
+        lstHybris.setMinimumSize(new java.awt.Dimension(100, 440));
         hybrisPanel.add(lstHybris, gbc);
 
         gbc.anchor = GridBagConstraints.SOUTH;
