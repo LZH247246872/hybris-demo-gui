@@ -15,6 +15,8 @@
  */
 package fr.eurecom.hybris.demogui;
 
+import java.awt.Color;
+import java.awt.Component;
 import java.awt.EventQueue;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -24,11 +26,15 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.awt.event.WindowEvent;
+import java.awt.event.WindowListener;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.util.ArrayList;
 
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
@@ -36,6 +42,7 @@ import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
@@ -50,13 +57,8 @@ import fr.eurecom.hybris.demogui.CloudManager.OperationType;
 /**
  * GUI for showing some benefits of using Hybris during demos. 
  * @author P. Viotti
- * 
- * TODO:
- * - erasure coding
- * - embedded Zk server (?)
- * - tooltip with size (?)
  */
-public class HybrisDemoGui implements KeyListener, ActionListener {
+public class HybrisDemoGui implements KeyListener, ActionListener, WindowListener {
 
     private CloudManager cm;
     
@@ -64,6 +66,7 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
     private JList<String> lstRackspace, lstAmazon, lstGoogle, lstAzure, lstHybris;
     public DefaultListModel<String> lmRackspace, lmAmazon, lmGoogle, lmAzure, lmHybris;
     private JButton btnGet, btnPut, btnDelete;
+    public ArrayList<String> corruptedItems;
     
     
     public class CustomOutputStream extends OutputStream {
@@ -79,6 +82,31 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
             textArea.setCaretPosition(textArea.getDocument().getLength()); // scroll to the end
         }
     }
+    
+    
+    private class MyListRenderer extends DefaultListCellRenderer {  
+
+        private static final long serialVersionUID = 1L;
+        private String listName;
+        
+        public MyListRenderer(String lName) {
+            super();
+            this.listName = lName;
+        }
+   
+        public Component getListCellRendererComponent(JList list, Object value, int index, 
+                boolean isSelected, boolean cellHasFocus ) {
+            
+            Component c = super.getListCellRendererComponent( list, value, index, isSelected, cellHasFocus );  
+            if (corruptedItems.contains(listName + value))  
+                c.setForeground(Color.red);  
+            else if (isSelected)  
+                    c.setForeground(Color.white);
+                else
+                    c.setForeground(Color.black);
+            return c;  
+        }  
+    }  
 
     
     public static void main(String[] args) {
@@ -102,6 +130,8 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
         lmAzure = new DefaultListModel<String>();
         lmGoogle = new DefaultListModel<String>();
         lmRackspace = new DefaultListModel<String>();
+        
+        corruptedItems = new ArrayList<String>();
         
         cm = new CloudManager(this);
         
@@ -190,7 +220,7 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
 
         gbc.gridy = 6;
         gbc.gridheight = 1;
-        cloudsPanel.add(new JLabel("<html><b>Rackspace Cloud Files</b></html>"), gbc);
+        cloudsPanel.add(new JLabel("<html><b>Google Cloud Storage</b></html>"), gbc);
 
         gbc.gridheight = 2;
         gbc.gridy = 7;
@@ -201,7 +231,7 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
 
         gbc.gridy = 9;
         gbc.gridheight = 1;
-        cloudsPanel.add(new JLabel("<html><b>Google Cloud Storage</b></html>"), gbc);
+        cloudsPanel.add(new JLabel("<html><b>Rackspace Cloud Files</b></html>"), gbc);
 
         gbc.gridheight = 2;
         gbc.gridy = 10;
@@ -221,7 +251,7 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
         
         gbc.gridx = 0;
         gbc.gridy = 1;
-        JTextArea jt = new JTextArea(5, 30);      
+        JTextArea jt = new JTextArea(10, 30);      
         JScrollPane scrollPane = new JScrollPane(jt);
         frame.add(scrollPane, gbc);
         
@@ -230,12 +260,17 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
         System.setErr(printStream);
 
         frame.pack();
-        frame.setSize(550, 700);
+        frame.setSize(550, 800);
         frame.setResizable(false);
         
         lstAmazon.addKeyListener(this); lstAzure.addKeyListener(this);
         lstGoogle.addKeyListener(this); lstRackspace.addKeyListener(this);
         lstHybris.addKeyListener(this);
+        
+        lstAmazon.setCellRenderer(this.new MyListRenderer("amazon"));
+        lstGoogle.setCellRenderer(this.new MyListRenderer("google"));
+        lstAzure.setCellRenderer(this.new MyListRenderer("azure"));
+        lstRackspace.setCellRenderer(this.new MyListRenderer("rackspace"));
 
         btnGet.addActionListener(this);
         btnPut.addActionListener(this);
@@ -253,23 +288,59 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
                     new Thread(cm.new 
                             BackgroundWorker(OperationType.DELETE, ClientType.AWS, jlist.getSelectedValue(), null)).start();
                     System.out.println("Removed " + jlist.getSelectedValue() + " from Amazon S3.");
+                    corruptedItems.remove("amazon" + jlist.getSelectedValue());
                 } else if (jlist.equals(lstAzure)) {
                     new Thread(cm.new 
                             BackgroundWorker(OperationType.DELETE, ClientType.AZURE, jlist.getSelectedValue(), null)).start();
                     System.out.println("Removed " + jlist.getSelectedValue() + " from Azure.");
+                    corruptedItems.remove("azure" + jlist.getSelectedValue());
                 } else if (jlist.equals(lstGoogle)) {
                     new Thread(cm.new 
                             BackgroundWorker(OperationType.DELETE, ClientType.GOOGLE, jlist.getSelectedValue(), null)).start();
                     System.out.println("Removed " + jlist.getSelectedValue() + " from Google.");
+                    corruptedItems.remove("google" + jlist.getSelectedValue());
                 } else if (jlist.equals(lstRackspace)) {
                     new Thread(cm.new 
                             BackgroundWorker(OperationType.DELETE, ClientType.RACKSPACE, jlist.getSelectedValue(), null)).start();
                     System.out.println("Removed " + jlist.getSelectedValue() + " from Rackspace.");
+                    corruptedItems.remove("rackspace" + jlist.getSelectedValue());
                 } else if (jlist.equals(lstHybris)) {
                     new Thread(cm.new 
                             BackgroundWorker(OperationType.DELETE, ClientType.HYBRIS, jlist.getSelectedValue(), null)).start();
                     System.out.println("Removed " + jlist.getSelectedValue() + " from Hybris.");
                 }
+            }
+        } else if (e.getKeyChar() == 'c') {
+            JList<String> jlist =  (JList<String>) e.getComponent();
+            if (jlist.getSelectedIndex() >= 0) {
+                
+                byte[] corruptedPayload = "I_AM_THE_BOGUS_PAYLOAD".getBytes();
+            
+                if (jlist.equals(lstAmazon)) {
+                    JOptionPane.showMessageDialog(frame, "Corrupted " + jlist.getSelectedValue() + " on Amazon S3.", "Corruption", JOptionPane.WARNING_MESSAGE);
+                    System.out.println("Corrupted " + jlist.getSelectedValue() + " on Amazon S3.");
+                    corruptedItems.add("amazon" + jlist.getSelectedValue());
+                    new Thread(cm.new 
+                            BackgroundWorker(OperationType.PUT, ClientType.AWS, jlist.getSelectedValue(), corruptedPayload)).start();
+                } else if (jlist.equals(lstAzure)) {
+                    System.out.println("Corrupted " + jlist.getSelectedValue() + " on Azure.");
+                    JOptionPane.showMessageDialog(frame, "Corrupted " + jlist.getSelectedValue() + " on Azure.", "Corruption", JOptionPane.WARNING_MESSAGE);
+                    corruptedItems.add("azure" + jlist.getSelectedValue());
+                    new Thread(cm.new 
+                            BackgroundWorker(OperationType.PUT, ClientType.AZURE, jlist.getSelectedValue(), corruptedPayload)).start();
+                } else if (jlist.equals(lstGoogle)) {
+                    JOptionPane.showMessageDialog(frame, "Corrupted " + jlist.getSelectedValue() + " on Google.", "Corruption", JOptionPane.WARNING_MESSAGE);
+                    System.out.println("Corrupted " + jlist.getSelectedValue() + " on Google.");
+                    corruptedItems.add("google" + jlist.getSelectedValue());
+                    new Thread(cm.new 
+                            BackgroundWorker(OperationType.PUT, ClientType.GOOGLE, jlist.getSelectedValue(), corruptedPayload)).start();
+                } else if (jlist.equals(lstRackspace)) {
+                    JOptionPane.showMessageDialog(frame, "Corrupted " + jlist.getSelectedValue() + " on Rackspace.", "Corruption", JOptionPane.WARNING_MESSAGE);
+                    System.out.println("Corrupted " + jlist.getSelectedValue() + " on Rackspace.");
+                    corruptedItems.add("rackspace" + jlist.getSelectedValue());
+                    new Thread(cm.new 
+                            BackgroundWorker(OperationType.PUT, ClientType.RACKSPACE, jlist.getSelectedValue(), corruptedPayload)).start();
+                } 
             }
         }
     }
@@ -286,13 +357,17 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
                 try {
                    System.out.println("Retrieving " + lstHybris.getSelectedValue() + "...");
                    byte[] retrieved = cm.hybris.get(lstHybris.getSelectedValue());
-                   JFileChooser fc = new JFileChooser();
-                   int returnVal = fc.showSaveDialog(frame);
-                   if (returnVal == JFileChooser.APPROVE_OPTION) {
-                       File file = fc.getSelectedFile();
-                       FileUtils.writeByteArrayToFile(file, retrieved);
-                       System.out.println("Saved: " + file.getName() + ".");
-                   }
+                   if (retrieved != null) {
+                       JFileChooser fc = new JFileChooser(System.getProperty("user.home") + File.separator + "Desktop");
+                       fc.setSelectedFile(new File("RETRIEVED_" + lstHybris.getSelectedValue()));
+                       int returnVal = fc.showSaveDialog(frame);
+                       if (returnVal == JFileChooser.APPROVE_OPTION) {
+                           File file = fc.getSelectedFile();
+                           FileUtils.writeByteArrayToFile(file, retrieved);
+                           System.out.println("Saved: " + file.getName() + ".");
+                       }
+                   } else
+                       JOptionPane.showMessageDialog(frame, "Hybris could not download the file.", "Error", JOptionPane.ERROR_MESSAGE);
                } catch (Exception e1) {
                    e1.printStackTrace();
                }
@@ -300,7 +375,7 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
            
         } if (cmd.equals("Put")) {
             
-            JFileChooser fc = new JFileChooser();
+            JFileChooser fc = new JFileChooser(System.getProperty("user.home") + File.separator + "Desktop");
             int returnVal = fc.showOpenDialog(frame);
             if (returnVal == JFileChooser.APPROVE_OPTION) {
                 File file = fc.getSelectedFile();
@@ -324,5 +399,16 @@ public class HybrisDemoGui implements KeyListener, ActionListener {
                 System.out.println("Removed " + lstHybris.getSelectedValue() + " from Hybris.");
             }
         }
+    }
+
+    public void windowActivated(WindowEvent arg0) {  }
+    public void windowClosed(WindowEvent arg0) {  }
+    public void windowDeactivated(WindowEvent arg0) { }
+    public void windowDeiconified(WindowEvent arg0) { }
+    public void windowIconified(WindowEvent arg0) { }
+    public void windowOpened(WindowEvent arg0) { }
+
+    public void windowClosing(WindowEvent arg0) {
+        this.cm.shutdown();
     }
 }

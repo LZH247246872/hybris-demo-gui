@@ -1,15 +1,16 @@
 ### Hybris Demo GUI
 
-This is a simple graphical tool that provides a way to exhibit some of the benefits of 
+This is a simple graphical tool for demonstrating some of the benefits of 
 using [Hybris](http://github.com/pviotti/hybris) as storage library.  
 
-Hybris Demo GUI allows you to:
+Hybris Demo GUI allows to:
 
- - add files to Hybris (and it shows to which clouds are uploaded)
- - remove files from Hybris 
- - remove files from single clouds to simulate faults
- - list Hybris and clouds containers
- - retrieve files from Hybris
+ - adding files to Hybris (correspondently, those uploaded blobs show up on single clouds lists)
+ - removing files from Hybris 
+ - removing files from single clouds to simulate faults
+ - corrupting files on single clouds to simulate Byzantine faults of clouds
+ - listing Hybris and single clouds containers
+ - retrieving files from Hybris
  
 
 ![Hybris Demo GUI screenshot](https://raw.github.com/pviotti/hybris-demo-gui/master/doc/hybris-demo-gui.png)

@@ -15,15 +15,18 @@
  */
 package fr.eurecom.hybris.demogui;
 
+import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.util.Properties;
 
 import org.jclouds.ContextBuilder;
 import org.jclouds.blobstore.BlobStore;
 import org.jclouds.blobstore.BlobStores;
+import org.jclouds.blobstore.domain.Blob;
 import org.jclouds.blobstore.domain.StorageMetadata;
 import org.jclouds.blobstore.options.ListContainerOptions;
 import org.jclouds.openstack.swift.v1.blobstore.RegionScopedBlobStoreContext;
+import org.jets3t.service.ServiceException;
 import org.jets3t.service.impl.rest.httpclient.GoogleStorageService;
 import org.jets3t.service.model.GSObject;
 import org.jets3t.service.security.GSCredentials;
@@ -33,7 +36,11 @@ import com.amazonaws.services.s3.model.Region;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.model.StorageClass;
+import com.google.common.io.ByteSource;
 import com.microsoft.windowsazure.services.blob.client.CloudBlob;
 import com.microsoft.windowsazure.services.blob.client.CloudBlobClient;
 import com.microsoft.windowsazure.services.blob.client.CloudBlobContainer;
@@ -58,7 +65,7 @@ public class CloudManager {
     
     private final String hybrisPropertiesFile = "hybris.properties";
     private final String hybrisAccountsPropertiesFile = "accounts.properties";
-    private final String container = "hybris-guitest";
+    private final String container = "hybris-demo-gui";
     
     enum OperationType {
         INIT_REFRESH, REFRESH, DELETE, PUT 
@@ -70,6 +77,13 @@ public class CloudManager {
     
     public CloudManager(HybrisDemoGui htg) {
         gui = htg;
+    }
+    
+    public void shutdown() {
+        hybris.shutdown();
+        try {
+            gsService.shutdown();
+        } catch(ServiceException e) { }
     }
     
     public class BackgroundWorker implements Runnable {    
@@ -130,14 +144,6 @@ public class CloudManager {
             Properties accountsProperties = new Properties();
             accountsProperties.load(new FileInputStream(hybrisAccountsPropertiesFile));
 
-            // Amazon S3
-            identity = accountsProperties.getProperty("hybris.kvs.drivers.amazon.akey");
-            credential = accountsProperties.getProperty("hybris.kvs.drivers.amazon.skey");
-            BasicAWSCredentials credentials = new BasicAWSCredentials(identity, credential);
-            s3Client = new AmazonS3Client(credentials);
-            if (!s3Client.doesBucketExist(container))
-                s3Client.createBucket(container, Region.EU_Ireland);
-
             // Google cloud storage
             identity = accountsProperties.getProperty("hybris.kvs.drivers.google.akey");
             credential = accountsProperties.getProperty("hybris.kvs.drivers.google.skey");
@@ -156,7 +162,6 @@ public class CloudManager {
             containerRef = azureClient.getContainerReference(container);
             containerRef.createIfNotExist();
 
-
             // Rackspace (jClouds)
             provider = "rackspace-cloudfiles-us";
             identity = accountsProperties.getProperty("hybris.kvs.drivers.rackspace.akey");
@@ -166,6 +171,14 @@ public class CloudManager {
                     .buildView(RegionScopedBlobStoreContext.class)
                     .blobStoreInRegion("IAD");
             rackspaceBlobStore.createContainerInLocation(null, container);
+            
+            // Amazon S3
+            identity = accountsProperties.getProperty("hybris.kvs.drivers.amazon.akey");
+            credential = accountsProperties.getProperty("hybris.kvs.drivers.amazon.skey");
+            BasicAWSCredentials credentials = new BasicAWSCredentials(identity, credential);
+            s3Client = new AmazonS3Client(credentials);
+            if (!s3Client.doesBucketExist(container))
+                s3Client.createBucket(container, Region.EU_Ireland);
         }
         
         private void refreshLists() {
@@ -203,8 +216,9 @@ public class CloudManager {
                 gui.lmRackspace.clear();
                 for (StorageMetadata resourceMd :
                     BlobStores.listAll(rackspaceBlobStore,
-                            container, ListContainerOptions.NONE))
+                            container, ListContainerOptions.NONE)) 
                     gui.lmRackspace.addElement(resourceMd.getName());
+                
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -215,6 +229,33 @@ public class CloudManager {
                 switch(cType) {
                     case HYBRIS:
                         hybris.put(key, payload);
+                        break;
+                        
+                    // For corrupting single clouds' blobs
+                    case AWS:
+                        ByteArrayInputStream bais = new ByteArrayInputStream(payload);
+                        ObjectMetadata om = new ObjectMetadata();
+                        om.setContentLength(payload.length);
+                        PutObjectRequest request = new PutObjectRequest(container, key, bais, om);
+                        request.setStorageClass(StorageClass.ReducedRedundancy);
+                        s3Client.putObject(request);
+                        break;
+                    case GOOGLE:
+                        GSObject object = new GSObject(key);
+                        ByteArrayInputStream in = new ByteArrayInputStream(payload);
+                        object.setDataInputStream(in);
+                        object.setContentLength(payload.length);
+                        gsService.putObject(container, object);
+                        break;
+                    case AZURE:
+                        CloudBlobContainer containerRef = azureClient.getContainerReference(container);
+                        CloudBlob cblob = containerRef.getBlockBlobReference(key);
+                        cblob.upload(new ByteArrayInputStream(payload), payload.length);
+                        break;
+                    case RACKSPACE:
+                        Blob blob = rackspaceBlobStore.blobBuilder(key)
+                        .payload(ByteSource.wrap(payload)).build();
+                        rackspaceBlobStore.putBlob(container, blob);
                         break;
                 }
             } catch(Exception e) {
